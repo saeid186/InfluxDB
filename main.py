@@ -23,11 +23,11 @@ class create_thread:
                 log.exception("Could not import influxdb module: {0}".format(e))
                 sys.exit(1) 
             db = InfluxDBClient(
-                host= 'localhost',#cfg['influxdb']['host'],
-                port='8086',#cfg['influxdb']['port'],
-                username='nagios',#cfg['influxdb']['username'],
-                password='nagios@123',#cfg['influxdb']['password'],
-                database='test'#cfg['influxdb']['database'],
+                host= Config.host,#cfg['influxdb']['host'],
+                port= Config.port,#cfg['influxdb']['port'],
+                username= Config.username,#cfg['influxdb']['username'],
+                password= Config.password,#cfg['influxdb']['password'],
+                database= Config.database #cfg['influxdb']['database'],
                 #ssl=cfg['influxdb']['ssl'],
                 #verify_ssl=cfg['influxdb']['verify_ssl'],
                 #timeout=float(cfg['influxdb']['timeout']),
@@ -127,7 +127,7 @@ class create_thread:
                 continue
             # pick out values from the line
             if line_dict['DATATYPE'] == "SERVICEPERFDATA":
-                service_description = line_dict['SERVICEDESC']
+                service_description = "_Service"
                 perfdata = line_dict['SERVICEPERFDATA']
                 if not perfdata:
                     skipped_lines += 1
@@ -135,7 +135,7 @@ class create_thread:
                     continue
                 check_command = line_dict['SERVICECHECKCOMMAND'].split('!')[0]
             elif line_dict['DATATYPE'] == "HOSTPERFDATA":
-                service_description = "__host__"
+                service_description = "_Host"
                 perfdata = line_dict['HOSTPERFDATA']
                 check_command = line_dict['HOSTCHECKCOMMAND'].split('!')[0]
             else:
@@ -156,7 +156,8 @@ class create_thread:
                         "min": min,
                         "max": max
                     }
-                    fields = {"label": label, "uom": uom}
+                    fields = { }
+                    tags = {"label": label, "exec_time": timestamp}
                     for field, value in numeric_fields.items():
                         if value is not None and value.strip():
                             value = re.sub('[^0-9.]','', value)
@@ -164,15 +165,9 @@ class create_thread:
                                 fields[field] = float(value)
                             except ValueError:
                                 logging.info(f"Failed to float() '{field}' = '{value}' for '{service_description}'@'{host_name}'")
-                    tags = {
-                        "service_description": service_description,
-                        "host_name": host_name,
-                        "metric": label
-                    }
-            
+
                     point = {
-                        "measurement": check_command,
-                        "timestamp": timestamp,
+                        "measurement": f"{host_name}{service_description}",
                         "fields": fields,
                         "tags": tags
                     }
@@ -186,13 +181,10 @@ class create_thread:
     def update(self, name,file_name):
         try:
             start = timer()
-            #self.influxdb(name ,  file_name)
-            os.rename(file_name,f'{file_name}-processing')
-            points = self.process_perfdata_file(f"{file_name}-processing")
-            logging.info(f"before send point ")
-            self.send_points(points)
-            logging.info(f"after send point")
-            #self.influxdb(name ,  file_name)
+            os.rename(file_name, f'{file_name}-process')
+            points = self.process_perfdata_file(f"{file_name}-process")
+            if self.send_points(points):
+                shutil.move(f'{file_name}-process', Config.destination_path)
             end = timer()
         except tweepy.error.TweepError as e:
             logging.info("Thread %s: error with %e", name, e)
@@ -206,11 +198,11 @@ class create_thread:
         files = os.listdir(Config.file_path)
         total_file = []
         for file in files:
-            if 'txt' in file and 'processing' not in file and 'skipped' not in file :
-                if create_thread.check_skip_file(file):
+            if "perfdata" in file and "process" not in file:
+                if create_thread.check_skip_file(Config.file_path + file):
                     continue
                 else:
-                    total_file.append(file)
+                    total_file.append(Config.file_path + file)
         total_file = sorted(total_file)
         if len(total_file) > max_workers:
             max_index = max_workers
@@ -221,19 +213,17 @@ class create_thread:
 if __name__ == "__main__":
     format = "%(asctime)s: %(message)s"
     logging.basicConfig(format=format, level=logging.INFO,
-                        datefmt="%H:%M:%S")
+                        filename= Config.log_file, datefmt="%H:%M:%S")
 
     create_thread = create_thread()
     create_thread.init_influxdb_client()
     while True:
         create_thread.loop_file()
-        print(total_file)
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
         for index in range(max_index):
             if max_workers < threading.active_count()-1 :
                 continue
             else:
-                logging.info(f"trying for file  {total_file[index]} and total len is {max_index}")
                 executor.submit(create_thread.update, total_file[index],total_file[index])
         logging.info(f"total live thrad is {threading.active_count()-1}")
         time.sleep(Config.sleep_time)
