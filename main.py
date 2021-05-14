@@ -5,6 +5,7 @@ import concurrent.futures
 import os
 import shutil
 import re
+import Config
 from timeit import default_timer as timer
 
 class create_thread:
@@ -198,26 +199,24 @@ class create_thread:
             pass
 
 
-def loop_file():
-    global total_file , max_workers , max_index
-    max_workers= 4
-    max_index = 0
-    files = os.listdir('/tmp/influx/')
-    total_file = []
-    for file in files:
-        if 'txt' in file and 'processing' not in file and 'skipped' not in file :
-            if create_thread.check_skip_file(file):
-                continue
-            else:
-                total_file.append(file)
-    total_file = sorted(total_file)
-    if len(total_file) > max_workers:
-        max_index = max_workers
-    else:
-        max_index = len(total_file)
+    def loop_file(self):
+        global total_file , max_workers , max_index
+        max_workers = Config.max_worker
+        max_index = Config.max_index
+        files = os.listdir(Config.file_path)
+        total_file = []
+        for file in files:
+            if 'txt' in file and 'processing' not in file and 'skipped' not in file :
+                if create_thread.check_skip_file(file):
+                    continue
+                else:
+                    total_file.append(file)
+        total_file = sorted(total_file)
+        if len(total_file) > max_workers:
+            max_index = max_workers
+        else:
+            max_index = len(total_file)
     
-
-
 
 if __name__ == "__main__":
     format = "%(asctime)s: %(message)s"
@@ -227,7 +226,8 @@ if __name__ == "__main__":
     create_thread = create_thread()
     create_thread.init_influxdb_client()
     while True:
-        loop_file()
+        create_thread.loop_file()
+        print(total_file)
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
         for index in range(max_index):
             if max_workers < threading.active_count()-1 :
@@ -236,4 +236,4 @@ if __name__ == "__main__":
                 logging.info(f"trying for file  {total_file[index]} and total len is {max_index}")
                 executor.submit(create_thread.update, total_file[index],total_file[index])
         logging.info(f"total live thrad is {threading.active_count()-1}")
-        time.sleep(2)
+        time.sleep(Config.sleep_time)
