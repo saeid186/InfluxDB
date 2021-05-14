@@ -15,7 +15,7 @@ class create_thread:
     def init_influxdb_client(self):
         global db
 
-        if 2 == 2:
+        if 3 == 3:
             try:
                 from influxdb import InfluxDBClient
             except ImportError as e:
