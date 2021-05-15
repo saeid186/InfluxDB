@@ -8,3 +8,4 @@ port = 8086
 username = "nagios"
 password = "nagios@123"
 database = "nagios"
+test = 1
