@@ -185,6 +185,8 @@ class create_thread:
             points = self.process_perfdata_file(f"{file_name}-process")
             if self.send_points(points):
                 shutil.move(f'{file_name}-process', Config.destination_path)
+            else:
+                os.rename(f'{file_name}-process', file_name)
             end = timer()
         except tweepy.error.TweepError as e:
             logging.info("Thread %s: error with %e", name, e)
@@ -194,7 +196,7 @@ class create_thread:
     def loop_file(self):
         global total_file , max_workers , max_index
         max_workers = Config.max_worker
-        max_index = Config.max_index
+        max_index = 0
         files = os.listdir(Config.file_path)
         total_file = []
         for file in files:
