@@ -5,5 +5,4 @@
         rotate 50
         create 0666 root root
         missingok
-        notifempty
 }
