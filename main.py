@@ -16,11 +16,11 @@ class create_thread:
     def init_influxdb_client(self):
         global db
 
-        if 3 == 3:
+        if not Config.cluster:
             try:
                 from influxdb import InfluxDBClient
             except ImportError as e:
-                log.exception("Could not import influxdb module: {0}".format(e))
+                logging.exception("Could not import influxdb module: {0}".format(e))
                 sys.exit(1) 
             db = InfluxDBClient(
                 host= Config.host,#cfg['influxdb']['host'],
@@ -39,19 +39,19 @@ class create_thread:
             try:
                 from influxdb import InfluxDBClusterClient
             except ImportError as e:
-                log.exception("Could not import influxdb module: {0}".format(e))
+                logging.exception("Could not import influxdb module: {0}".format(e))
             db = InfluxDBClusterClient(
-                hosts=cfg['influxdb']['hosts'],
-                username=cfg['influxdb']['username'],
-                password=cfg['influxdb']['password'],
-                database=cfg['influxdb']['database'],
-                ssl=cfg['influxdb']['ssl'],
-                verify_ssl=cfg['influxdb']['verify_ssl'],
-                timeout=float(cfg['influxdb']['timeout']),
-                use_udp=cfg['influxdb']['use_udp'],
-                udp_port=cfg['influxdb']['udp_port'],
-                shuffle=cfg['influxdb']['shuffle'],
-                healing_delay=cfg['influxdb']['healing_delay']
+                hosts=Config.hosts,
+                username=Config.username, #cfg['influxdb']['username'],
+                password=Config.password, #cfg['influxdb']['password'],
+                database=Config.database #cfg['influxdb']['database'],
+                # ssl=cfg['influxdb']['ssl'],
+                # verify_ssl=cfg['influxdb']['verify_ssl'],
+                # timeout=float(cfg['influxdb']['timeout']),
+                # use_udp=cfg['influxdb']['use_udp'],
+                # udp_port=cfg['influxdb']['udp_port'],
+                # shuffle=cfg['influxdb']['shuffle'],
+                # healing_delay=cfg['influxdb']['healing_delay']
             ) 
 
     def send_points(self,points):
@@ -143,7 +143,9 @@ class create_thread:
                 logging.info(f"Unknown DATATYPE, skipping: '{line_dict['DATATYPE']}'")
                 continue
             host_name = line_dict['HOSTNAME']
-            timestamp = line_dict['TIMET']
+            timestamp = int(str(line_dict['TIMET']) + str('000000000'))
+            # timestamp1 = str(timestamp) + str('000000000')
+            # timestamp2 = int(timestamp1)
             # extract individual metrics from the perfdata string
             for metric in re.findall("(.*?=.+?)\s", perfdata + ' '):
                 m = re.search(perfdata_re, metric)
@@ -157,7 +159,7 @@ class create_thread:
                         "max": max
                     }
                     fields = { }
-                    tags = {"label": label, "exec_time": timestamp}
+                    tags = {"label": label}
                     for field, value in numeric_fields.items():
                         if value is not None and value.strip():
                             value = re.sub('[^0-9.]','', value)
@@ -169,7 +171,8 @@ class create_thread:
                     point = {
                         "measurement": f"{host_name}{service_description}",
                         "fields": fields,
-                        "tags": tags
+                        "tags": tags,
+                        "time" : timestamp
                     }
                     points.append(point)
                 else:
@@ -185,6 +188,7 @@ class create_thread:
             points = self.process_perfdata_file(f"{file_name}-process")
             if self.send_points(points):
                 shutil.move(f'{file_name}-process', Config.destination_path)
+                logging.info(f"End process for file {file_name}")
             else:
                 os.rename(f'{file_name}-process', file_name)
             end = timer()
@@ -215,7 +219,7 @@ class create_thread:
 if __name__ == "__main__":
     format = "%(asctime)s: %(message)s"
     logging.basicConfig(format=format, level=logging.INFO,
-                        filename= Config.log_file, datefmt="%H:%M:%S")
+                        filename= Config.log_file, datefmt="%Y-%m-%d %H:%M:%S")
 
     create_thread = create_thread()
     create_thread.init_influxdb_client()
@@ -227,5 +231,6 @@ if __name__ == "__main__":
                 continue
             else:
                 executor.submit(create_thread.update, total_file[index],total_file[index])
-        logging.info(f"total live thrad is {threading.active_count()-1}")
+                logging.info(f"Trying for file {total_file[index]}")
+        #logging.info(f"total live thrad is {threading.active_count()-1}")
         time.sleep(Config.sleep_time)
