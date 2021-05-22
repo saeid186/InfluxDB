@@ -1,3 +1,7 @@
+from timeit import default_timer as timer
+from configparser import SafeConfigParser
+from optparse import OptionParser
+from ast import literal_eval
 import logging
 import threading
 import time
@@ -6,7 +10,66 @@ import os
 import shutil
 import re
 import Config
-from timeit import default_timer as timer
+
+
+config_file = '/etc/perfdata/perfdata.conf'
+
+# config dictionary
+cfg = {}
+
+# options parsing
+parser = OptionParser("usage: %prog [options] sends nagios performance data to InfluxDB.")
+parser.add_option("-c", "--config", dest="config_file", default=config_file,
+                    help="Set custom config file location.")
+parser.add_option("--show-defaults", dest="show_defaults", action="store_true", default=False,
+                    help="Print default configuration.")
+parser.add_option("-D", "--debug", dest="debug", action="store_true", default=False,
+                    help="Set log_level=logging.DEBUG")
+(options, args) = parser.parse_args()
+
+def convert_config_value(value):
+    """
+    param value: string containing either "true" or "false", case insensitive
+    return: boolean True or False, or the value if it's neither
+    """
+    if (value.lower() == "true"):
+        return True
+    elif (value.lower() == "false"):
+        return False
+    elif (value.lower() == "none" or value.strip() == ""):
+        return None
+    try:
+        return literal_eval(value)
+    except (ValueError, SyntaxError) as e:
+        return value
+
+def read_config(config_file):
+    """
+    param config_file: full path of file to read
+    param defaults: string containing default options
+    return: dict of configuration file sections and options
+    """
+    config = SafeConfigParser()
+    config_dict = {}
+
+    if os.path.isfile(config_file):
+        config.read(config_file)
+    else:
+        print("Could not read config file, using defaults: {0}".format(config_file))
+
+    for section in config.sections():
+        config_dict[section] = {}
+        for name, value in config.items(section):
+            config_dict[section][name] = convert_config_value(value)
+            logging.info("Parsed config option [{0}] {1} = {2}"
+                .format(section, name, config_dict[section][name]))
+
+    return config_dict
+
+if options.show_defaults:
+    cfg = read_config(config_file)
+else:
+    cfg = read_config(options.config_file)
 
 class create_thread:
     def __init__(self):
@@ -16,18 +79,18 @@ class create_thread:
     def init_influxdb_client(self):
         global db
 
-        if not Config.cluster:
+        if not cfg['influxdb']['cluster']:
             try:
                 from influxdb import InfluxDBClient
             except ImportError as e:
                 logging.exception("Could not import influxdb module: {0}".format(e))
                 sys.exit(1) 
             db = InfluxDBClient(
-                host= Config.host,#cfg['influxdb']['host'],
-                port= Config.port,#cfg['influxdb']['port'],
-                username= Config.username,#cfg['influxdb']['username'],
-                password= Config.password,#cfg['influxdb']['password'],
-                database= Config.database #cfg['influxdb']['database'],
+                host= cfg['influxdb']['host'],
+                port= cfg['influxdb']['port'],
+                username= cfg['influxdb']['username'],
+                password= cfg['influxdb']['password'],
+                database= cfg['influxdb']['database']
                 #ssl=cfg['influxdb']['ssl'],
                 #verify_ssl=cfg['influxdb']['verify_ssl'],
                 #timeout=float(cfg['influxdb']['timeout']),
@@ -187,7 +250,7 @@ class create_thread:
             os.rename(file_name, f'{file_name}-process')
             points = self.process_perfdata_file(f"{file_name}-process")
             if self.send_points(points):
-                shutil.move(f'{file_name}-process', Config.destination_path)
+                shutil.move(f'{file_name}-process', cfg['perfdata']['destination_path'])
                 logging.info(f"End process for file {file_name}")
             else:
                 os.rename(f'{file_name}-process', file_name)
@@ -199,16 +262,16 @@ class create_thread:
 
     def loop_file(self):
         global total_file , max_workers , max_index
-        max_workers = Config.max_worker
+        max_workers = cfg['perfdata']['max_worker']
         max_index = 0
-        files = os.listdir(Config.file_path)
+        files = os.listdir(cfg['perfdata']['file_path'])
         total_file = []
         for file in files:
             if "perfdata" in file and "process" not in file:
-                if create_thread.check_skip_file(Config.file_path + file):
+                if create_thread.check_skip_file(cfg['perfdata']['file_path'] + file):
                     continue
                 else:
-                    total_file.append(Config.file_path + file)
+                    total_file.append(cfg['perfdata']['file_path'] + file)
         total_file = sorted(total_file)
         if len(total_file) > max_workers:
             max_index = max_workers
@@ -233,4 +296,4 @@ if __name__ == "__main__":
                 executor.submit(create_thread.update, total_file[index],total_file[index])
                 logging.info(f"Trying for file {total_file[index]}")
         #logging.info(f"total live thrad is {threading.active_count()-1}")
-        time.sleep(Config.sleep_time)
+        time.sleep(cfg['perfdata']['sleep_time'])
