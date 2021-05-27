@@ -13,19 +13,17 @@
 
 [perfdata]
 
-spool_directory = /var/spool/nagios/fluxios
-file_path = /tmp/influx/
-log_file = /var/log/influxdb/perfdata/perfdata.log
-destination_path = /var/log/influxdb/perfdata/processed
+spool_directory = "/var/spool/nagios/fluxios/"
+file_path = "/tmp/influx/"
+log_file = "/var/log/influxdb/perfdata/perfdata.log"
+destination_path = "/var/log/influxdb/perfdata/processed/"
 max_worker = 500
 sleep_time = 2
 log_max_size = 24
 log_keep = 4
 log_level = logging.INFO
 interval = 15
-measurement_prefix =
 batch_size = 500
-extra_tags =
 
 
 
@@ -34,11 +32,10 @@ extra_tags =
 
 [influxdb]
 
-host = 127.0.0.1
+host = "127.0.0.1"
 port = 8086
 proxies = None
 cluster = False
-hosts =
 shuffle = True
 healing_delay = 900
 ssl = False

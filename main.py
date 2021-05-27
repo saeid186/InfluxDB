@@ -9,7 +9,6 @@ import concurrent.futures
 import os
 import shutil
 import re
-import Config
 
 
 config_file = '/etc/perfdata/perfdata.conf'
@@ -61,7 +60,7 @@ def read_config(config_file):
         config_dict[section] = {}
         for name, value in config.items(section):
             config_dict[section][name] = convert_config_value(value)
-            logging.info("Parsed config option [{0}] {1} = {2}"
+            print("Parsed config option [{0}] {1} = {2}"
                 .format(section, name, config_dict[section][name]))
 
     return config_dict
@@ -151,7 +150,7 @@ class create_thread:
 
         if os.stat(file_name)[6] == 0:
             logging.info(f"Found empty file, moving file: {file_name} without processing.")
-            shutil.move(f'{file_name}','/tmp/influx/processed/')
+            shutil.move(f'{file_name}',cfg['perfdata']['destination_path'])
             #rm_file(file_name)
             return True
 
@@ -250,8 +249,10 @@ class create_thread:
             os.rename(file_name, f'{file_name}-process')
             points = self.process_perfdata_file(f"{file_name}-process")
             if self.send_points(points):
-                shutil.move(f'{file_name}-process', cfg['perfdata']['destination_path'])
-                logging.info(f"End process for file {file_name}")
+                file = file_name.split(cfg['perfdata']['file_path'], 1)[1]
+                shutil.move(os.path.join(cfg['perfdata']['file_path'], f"{file}-process"),
+                            os.path.join(cfg['perfdata']['destination_path'], file))
+                logging.info(f"End process for file {file}")
             else:
                 os.rename(f'{file_name}-process', file_name)
             end = timer()
@@ -282,7 +283,7 @@ class create_thread:
 if __name__ == "__main__":
     format = "%(asctime)s: %(message)s"
     logging.basicConfig(format=format, level=logging.INFO,
-                        filename= Config.log_file, datefmt="%Y-%m-%d %H:%M:%S")
+                        filename= cfg['perfdata']['log_file'], datefmt="%Y-%m-%d %H:%M:%S")
 
     create_thread = create_thread()
     create_thread.init_influxdb_client()
