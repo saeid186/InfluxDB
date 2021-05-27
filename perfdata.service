@@ -1,0 +1,17 @@
+[Unit]
+Description=perfdata influxdb
+Documentation=https://github.com/saeid186/InfluxDB/tree/main#readme
+After=network-online.target
+
+[Service]
+User=influxdb
+Group=influxdb
+#LimitNOFILE=65536
+#EnvironmentFile=-/etc/default/influxdb
+ExecStart= /usr/bin/python3.6 /usr/bin/perfdata_main.py -c /etc/perfdata/perfdata.conf
+KillMode=control-group
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+#Alias=perfdata.service
