@@ -289,12 +289,20 @@ if __name__ == "__main__":
     create_thread.init_influxdb_client()
     while True:
         create_thread.loop_file()
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+        process_list = set()
+        active_thread = create_thread.count_active_process()
         for index in range(max_index):
-            if max_workers < threading.active_count()-1 :
-                continue
-            else:
-                executor.submit(create_thread.update, total_file[index],total_file[index])
-                logging.info(f"Trying for file {total_file[index]}")
-        #logging.info(f"total live thrad is {threading.active_count()-1}")
+        if active_thread < max_workers:
+            Process(target=create_thread.update, args=(total_file[index], total_file[index])).start()
+            active_thread += 1
+        time.sleep(cfg['perfdata']['sleep_time'])
+#         create_thread.loop_file()
+#         executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+#         for index in range(max_index):
+#             if max_workers < threading.active_count()-1 :
+#                 continue
+#             else:
+#                 executor.submit(create_thread.update, total_file[index],total_file[index])
+#                 logging.info(f"Trying for file {total_file[index]}")
+#         logging.info(f"total live thrad is {threading.active_count()-1}")
         time.sleep(cfg['perfdata']['sleep_time'])
